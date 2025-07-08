@@ -1,9 +1,22 @@
-FROM node:18-alpine
+FROM node:22.12-alpine AS builder
 
-COPY --from=mcp/tavily:latest /app /app
- 
-# Set up the working directory
+COPY . /app
+
 WORKDIR /app
- 
-# The command that will run when the container starts
-CMD ["sh", "-c", "npx -y supergateway --stdio \"node ./build/index.js\" --outputTransport streamableHttp --port 8080"]
+
+RUN --mount=type=cache,target=/root/.npm npm install
+
+FROM node:22-alpine AS release
+
+WORKDIR /app
+
+COPY --from=builder /app/build /app/build
+COPY --from=builder /app/package.json /app/package.json
+COPY --from=builder /app/package-lock.json /app/package-lock.json
+
+ENV NODE_ENV=production
+ENV TAVILY_API_KEY=your-api-key-here
+
+RUN npm ci --ignore-scripts --omit-dev
+
+ENTRYPOINT ["node", "build/index.js"]
